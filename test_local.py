@@ -18,7 +18,7 @@ if not GEMINI_API_KEY:
 
 os.environ["GEMINI_API_KEY"] = GEMINI_API_KEY
 
-from api.analyze import analyze_screenshot, to_garden_format
+from api.analyze import analyze_screenshot, generate_poem, to_garden_format
 
 
 def main():
@@ -34,11 +34,12 @@ def main():
     print("Analyzing...\n")
 
     raw = analyze_screenshot(image_path)
-    result = to_garden_format(raw)
+    print("Generating poem...\n")
+    poem = generate_poem(raw)
+    result = to_garden_format(raw, poem)
 
-    print(json.dumps(result, indent=2))
-    print(f"\n✓ answer: {result['answer']}, guesses: {len(result['guesses'])}")
-    print(f"  flowers: {result['green_count']} green, {result['yellow_count']} yellow")
+    print(f"✓ answer: {result['answer']}, guesses: {len(result['guesses'])}")
+    print(f"  flowers: {result['green_count']} green, {result['yellow_count']} yellow\n")
 
     for g in result["guesses"]:
         colors = " ".join(
@@ -46,6 +47,8 @@ def main():
             for r in g["result"]
         )
         print(f"  {g['word']}  {colors}")
+
+    print(f"\nPoem:\n{result['poem']}")
 
 
 if __name__ == "__main__":

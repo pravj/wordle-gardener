@@ -3,9 +3,9 @@ Vercel Serverless Function — Wordle Screenshot Analyzer
 
 POST /api/analyze
 - Accepts: multipart/form-data with 'image' field
-- Returns: JSON with answer, guesses (word + colors), ready for wordle-garden
+- Returns: JSON with answer, guesses, flower counts, and poem — ready for wordle-garden
 
-Uses Gemini 2.5 Flash for vision analysis.
+Uses Gemini 2.5 Flash for vision analysis + poem generation.
 """
 
 import os
@@ -42,6 +42,25 @@ Return ONLY valid JSON in this exact format, all words UPPERCASE:
   ]
 }"""
 
+POEM_PROMPT = """You are given a Wordle game. Write a poem based on the guesses.
+
+Guesses (in order):
+{guesses_text}
+
+Answer: {answer}
+
+Write a poem where:
+- Number of stanzas = number of guesses ({num_guesses})
+- Each stanza is exactly 2 lines
+- Each stanza revolves around that guess word, woven naturally into the line — not as a letter hint
+- The sentiment of each stanza mirrors the progress of that guess:
+  lost/searching for poor guesses, hopeful for partial hits, triumphant for the win
+- Do NOT reference counts, numbers, or quantities of letters found — let the emotion carry the progress
+- No references to Wordle, grids, tiles, letters, or puzzles
+- The poem should read as a standalone piece about perseverance or discovery
+
+Return ONLY the poem text. Separate stanzas with a blank line. No title, no explanation."""
+
 # Map colors to wordle-garden result format
 COLOR_TO_RESULT = {
     "green": "correct",
@@ -61,7 +80,27 @@ def analyze_screenshot(image_path: str) -> dict:
     return json.loads(raw)
 
 
-def to_garden_format(data: dict) -> dict:
+def generate_poem(data: dict) -> str:
+    """Generate a poem from the extracted game data."""
+    genai.configure(api_key=GEMINI_API_KEY)
+    model = genai.GenerativeModel(MODEL_NAME)
+
+    guesses_text = "\n".join(
+        f"{i+1}. {g['word']} — {', '.join(g['colors'])}"
+        for i, g in enumerate(data["guesses"])
+    )
+
+    prompt = POEM_PROMPT.format(
+        guesses_text=guesses_text,
+        answer=data["answer"],
+        num_guesses=len(data["guesses"]),
+    )
+
+    response = model.generate_content(prompt)
+    return response.text.strip()
+
+
+def to_garden_format(data: dict, poem: str) -> dict:
     """Convert Gemini output to wordle-garden JSON format."""
     guesses = []
     green_count = 0
@@ -84,6 +123,7 @@ def to_garden_format(data: dict) -> dict:
     return {
         "answer": data["answer"].upper(),
         "guesses": guesses,
+        "poem": poem,
         "green_count": green_count,
         "yellow_count": yellow_count,
     }
@@ -117,7 +157,8 @@ class handler(BaseHTTPRequestHandler):
 
             try:
                 raw = analyze_screenshot(temp_path)
-                result = to_garden_format(raw)
+                poem = generate_poem(raw)
+                result = to_garden_format(raw, poem)
                 self._respond(200, result)
             finally:
                 os.unlink(temp_path)
