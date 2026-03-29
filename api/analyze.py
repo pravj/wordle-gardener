@@ -14,7 +14,7 @@ import base64
 import tempfile
 from http.server import BaseHTTPRequestHandler
 
-import google.generativeai as genai
+from google import genai
 from PIL import Image
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
@@ -69,21 +69,26 @@ COLOR_TO_RESULT = {
 }
 
 
+def get_client():
+    return genai.Client(api_key=GEMINI_API_KEY)
+
+
 def analyze_screenshot(image_path: str) -> dict:
     """Send screenshot to Gemini and parse structured game data."""
-    genai.configure(api_key=GEMINI_API_KEY)
-    model = genai.GenerativeModel(MODEL_NAME)
-
+    client = get_client()
     img = Image.open(image_path)
-    response = model.generate_content([WORDLE_PROMPT, img])
+
+    response = client.models.generate_content(
+        model=MODEL_NAME,
+        contents=[WORDLE_PROMPT, img],
+    )
     raw = response.text.strip().removeprefix("```json").removesuffix("```").strip()
     return json.loads(raw)
 
 
 def generate_poem(data: dict) -> str:
     """Generate a poem from the extracted game data."""
-    genai.configure(api_key=GEMINI_API_KEY)
-    model = genai.GenerativeModel(MODEL_NAME)
+    client = get_client()
 
     guesses_text = "\n".join(
         f"{i+1}. {g['word']} — {', '.join(g['colors'])}"
@@ -96,7 +101,10 @@ def generate_poem(data: dict) -> str:
         num_guesses=len(data["guesses"]),
     )
 
-    response = model.generate_content(prompt)
+    response = client.models.generate_content(
+        model=MODEL_NAME,
+        contents=prompt,
+    )
     return response.text.strip()
 
 
