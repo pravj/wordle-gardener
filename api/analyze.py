@@ -174,7 +174,11 @@ class handler(BaseHTTPRequestHandler):
         except json.JSONDecodeError:
             self._respond(422, {"error": "Could not parse Gemini response as JSON"})
         except Exception as e:
-            self._respond(500, {"error": str(e)})
+            err = str(e).lower()
+            if "429" in err or "rate" in err or "quota" in err or "too many" in err:
+                self._respond(429, {"error": "rate_limit"})
+            else:
+                self._respond(500, {"error": str(e)})
 
     def do_OPTIONS(self):
         """Handle CORS preflight."""
